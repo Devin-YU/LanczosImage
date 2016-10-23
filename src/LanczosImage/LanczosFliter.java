@@ -13,20 +13,15 @@ public class LanczosFliter {
 	 * on Lanczos Algorithm.
 	 * When 0 < widthScale, heightScale < 1 , the picture will be zoomed in.
 	 * When 1 < widthScale, heightScale, the picture will be zoomed out.
-	 * PNG, JPG AND BMP ONLY 
+	 * PNG, JPG AND BMP ONLY.
 	 */
-	public BufferedImage imageScale(String fileName, float widthScale, float heightScale) {
-		if (!fileName.endsWith("png") && !fileName.endsWith("jpg") && !fileName.endsWith("bmp")) {
+	public BufferedImage imageScale(String pathName, float widthScale, float heightScale) throws IOException {
+		if (!pathName.endsWith("png") && !pathName.endsWith("jpg") && !pathName.endsWith("bmp")) {
 			throw new RuntimeException("Wrrong File!");
 		}
-		File file = new File(fileName);
-		BufferedImage bufferedImage = null;
-		try {
-			bufferedImage = ImageIO.read(file);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		File file = new File(pathName);
+		BufferedImage bufferedImage = ImageIO.read(file);
+		
 		widthScale = 1/widthScale;
 		heightScale = 1/heightScale;
 		lanczosSize = widthScale > 1 ? 3 : 2;
@@ -35,20 +30,20 @@ public class LanczosFliter {
 		int destW = (int)(bufferedImage.getWidth() / widthScale);
 		int destH = (int)(bufferedImage.getHeight() / heightScale);
 		
-		int[] inPixels = getImageRGBArray(bufferedImage);
+		int[] inPixels = bufferedImage.getRGB(0, 0, srcW, srcH, null, 0, srcW);
 		int[] outPixels = new int[destW * destH];
-		
-		double x = 0, fx = 0, y = 0, fy = 0;
+
 		for (int col = 0; col < destW; col++) {
-			int pr = 0, pg = 0, pb = 0, pa = 0;
 			
-			x = col * widthScale; 
-			fx = (double)Math.floor(col * widthScale);
+			
+			double x = col * widthScale; 
+			double fx = (double)Math.floor(col * widthScale);
 			for (int row = 0; row < destH; row ++) {
 				
-				y = row * heightScale;
-				fy = (double)Math.floor(y);
-				double red = 0, green = 0, blue = 0, alpha = 0;
+				double y = row * heightScale;
+				double fy = (double)Math.floor(y);
+				double[] argb = {0, 0, 0, 0};
+				int[] pargb = {0, 0, 0, 0};
 				double totalWeight = 0;
 				
 				for (int subrow = (int)(fy - lanczosSize + 1); subrow <= fy + lanczosSize; subrow++) {
@@ -61,44 +56,29 @@ public class LanczosFliter {
 						
 						double weight = getLanczosFactor(x - subcol) * getLanczosFactor(y - subrow);
 						
-						if (weight > 0) {  
+						if (weight > 0) { 
                             int index = (subrow * srcW + subcol); 
-                            pa = (inPixels[index] >> 24) & 0xff;
-                            pr = (inPixels[index] >> 16) & 0xff;  
-                            pg = (inPixels[index] >> 8) & 0xff;  
-                            pb = inPixels[index] & 0xff;  
+                            for (int i = 0; i < 4; i++)
+                            	pargb[i] = (inPixels[index] >> 24 - 8 * i) & 0xff;
                             totalWeight += weight; 
-                            alpha += weight * pa;
-                            red += weight * pr;  
-                            green += weight * pg;  
-                            blue += weight * pb;  
+                            for (int i = 0; i < 4; i++)
+                            	argb[i] += weight * pargb[i];
 						}
 					}
 				}
-				pa = (int)(alpha / totalWeight);
-				pb = (int)(blue / totalWeight);
-				pr = (int)(red / totalWeight);
-				pg = (int)(green / totalWeight);
-				outPixels[row * destW + col] = (clamp(pa) << 24) |
-						(clamp(pr) << 16) |
-						(clamp(pg) << 8) |
-						clamp(pb);
-				
-				alpha = 0;
-				blue = 0;
-				red = 0;
-				green = 0;
-				totalWeight = 0;
+				for (int i = 0; i < 4; i++)
+					pargb[i] = (int)(argb[i] / totalWeight);
+				outPixels[row * destW + col] = (clamp(pargb[0]) << 24) |
+						(clamp(pargb[1]) << 16) |
+						(clamp(pargb[2]) << 8) |
+						clamp(pargb[3]);
 			}
 		}
 		
 		BufferedImage bufImg = new BufferedImage(destW, destH,
-				fileName.endsWith("png") ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
-		for (int i = 0; i < destH; i++) {
-			for (int j = 0; j < destW; j++) {
-				bufImg.setRGB(j, i, outPixels[i * destW + j]);
-			}
-		}
+				pathName.endsWith("png") ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+		
+		bufImg.setRGB(0, 0, destW, destH, outPixels, 0, destW);
 		return bufImg;
 	}
     private int clamp(int v)  
@@ -107,25 +87,11 @@ public class LanczosFliter {
     }  
   
     private double getLanczosFactor(double x) {  
-        if (x > lanczosSize)  
+        if (x >= lanczosSize)  
             return 0;   
         if (Math.abs(x) < 1e-16)  
             return 1;  
         x *= Math.PI; 
         return Math.sin(x) * Math.sin(x/lanczosSize) / (x*x);  
     }  
-	private int[] getImageRGBArray(BufferedImage img) {
-		int width = img.getWidth();
-		int height = img.getHeight();
-		
-		int[] RGBArray = new int[width * height];
-		
-		for (int i = 0; i < height; i++) {
-			for (int j = 0; j < width; j++) {
-				RGBArray[i * width + j] = img.getRGB(j, i);
-			}
-		}
-		
-		return RGBArray;
-	}
 }
